@@ -1,0 +1,5 @@
+"STARTUP.obj",
+"12864.obj",
+"RC522.obj" 
+TO "test" 
+RAMSIZE(256) 
