@@ -1,0 +1,434 @@
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE 12864
+OBJECT MODULE PLACED IN 12864.OBJ
+COMPILER INVOKED BY: E:\Keil\C51\BIN\C51.EXE 12864.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          /*-----------------------------------------------
+   2            Ãû³Æ£ºst7920×Ö¿âÒº¾§ÏÔÊ¾
+   3            ÂÛÌ³£ºwww.doflye.net
+   4            ±àÐ´£ºshifang
+   5            ÈÕÆÚ£º2009.5
+   6            ÐÞ¸Ä£ºÎÞ
+   7            ÄÚÈÝ£ºÍ¨¹ýÏÔÊ¾×Ö·û¡¢Êý×Ö¡¢ºº×ÖºÍÍ¼Æ¬²âÊÔÒº¾§»ù±¾¹¦ÄÜ
+   8          ------------------------------------------------*/
+   9          #include <STC12C5A.H>
+  10          #include "mfrc522.h"
+  11          #include <intrins.h>
+  12          #include  <STDIO.H>
+  13          #include <string.h>
+  14          
+  15          
+  16          #define uint unsigned int
+  17          #define uchar unsigned char
+  18          
+  19          
+  20          sbit rs         = P2^0;
+  21          sbit rw         = P2^1;
+  22          sbit e          = P2^2;
+  23          
+  24          #define lcddata P0
+  25          
+  26          
+  27          unsigned char artemp1 = 0xff, artemp2 = 0xff;
+  28          
+  29          bit arflag1 = 0,arflag2 = 0;
+  30          
+  31          //unsigned char aurs1[50],aurs2[50];
+  32          
+  33          
+  34          unsigned char code data1[16] = {0x12,0x34,0x56,0x78,0xED,0xCB,0xA9,0x87,0x12,0x34,0x56,0x78,0x01,0xFE,0x01
+             -,0xFE};
+  35          //M1¿¨µÄÄ³Ò»¿éÐ´ÎªÈçÏÂ¸ñÊ½£¬Ôò¸Ã¿éÎªÇ®°ü£¬¿É½ÓÊÕ¿Û¿îºÍ³äÖµÃüÁî
+  36          //4×Ö½Ú½ð¶î£¨µÍ×Ö½ÚÔÚÇ°£©£«4×Ö½Ú½ð¶îÈ¡·´£«4×Ö½Ú½ð¶î£«1×Ö½Ú¿éµØÖ·£«1×Ö½Ú¿éµØÖ·È¡·´£«1×Ö½Ú¿éµØÖ·£«1×Ö½Ú¿éµØÖ
+             -·È¡·´ 
+  37          unsigned char code data2[4]  = {0,0,0,0x01};
+  38          unsigned char code DefaultKey[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; 
+  39          
+  40          
+  41          unsigned char g_ucTempbuf[20];  
+  42          
+  43          
+  44          uchar xdata icstr[9] = 0;                             //¿ÕÊý×é£¬ÒªÏÔÊ¾µÄ8Î»  ic
+  45          uchar cuctemp[4] = 0;
+  46          
+  47          uchar xdata idstr[27] = 0;                   //id
+  48          uchar idtemp[13] = 0;
+  49          
+  50          uchar idbuffnum = 0;
+  51          
+  52          //ÑÓÊ±×Ó³ÌÐòÄ£¿é
+  53          //**********************************************
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 2   
+
+  54          void mdelay(uint delay)
+  55          {       uint i;
+  56   1              for(;delay>0;delay--)
+  57   1                      {for(i=0;i<80;i++) //1msÑÓÊ±.
+  58   2                      {;}
+  59   2                      }
+  60   1      }
+  61          
+  62          //************************************************
+  63          
+  64          void show();   //Òº¾§ÏÔÊ¾³ÌÐò
+  65          //****************************************
+  66          //12864Òº¾§ÏÔÊ¾²¿·Ö×Ó³ÌÐòÄ£¿é
+  67          //****************************************
+  68          
+  69          
+  70          
+  71          sbit busy=P0^7;   //lcd busy bit
+  72          void wr_d_lcd(uchar content);
+  73          void wr_i_lcd(uchar content);
+  74          void clrram_lcd (void);
+  75          void init_lcd(void);
+  76          void busy_lcd(void);
+  77          void rev_row_lcd(uchar row);
+  78          void rev_co_lcd(uchar row,uchar col,uchar mode);
+  79          void clr_lcd(void);
+  80          void wr_co_lcd(uchar row,uchar col,uchar lcddata1,uchar lcddtta2);
+  81          void wr_row_lcd(uchar row,char *p);
+  82          
+  83          
+  84          
+  85          void delaye(int ms)
+  86          {
+  87   1          while(ms--)
+  88   1              {
+  89   2            uchar i;
+  90   2                for(i=0;i<250;i++)  
+  91   2                 {
+  92   3                  _nop_();                       
+  93   3                      _nop_();
+  94   3                      _nop_();
+  95   3                      _nop_();
+  96   3                 }
+  97   2              }
+  98   1      }
+  99          
+ 100          //**********************************
+ 101          //Òº¾§³õÊ¼»¯
+ 102          //**********************************
+ 103          void init_lcd(void)
+ 104          {
+ 105   1              wr_i_lcd(0x06);  /*¹â±êµÄÒÆ¶¯·½Ïò*/
+ 106   1              wr_i_lcd(0x0c);  /*¿ªÏÔÊ¾£¬¹ØÓÎ±ê*/
+ 107   1              wr_i_lcd(0x01);
+ 108   1              delaye(5);
+ 109   1      }
+ 110          //***********************************
+ 111          //Ìî³äÒº¾§DDRAMÈ«Îª¿Õ¸ñ
+ 112          //**********************************
+ 113          void clrram_lcd (void)
+ 114          {
+ 115   1              wr_i_lcd(0x30);
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 3   
+
+ 116   1              wr_i_lcd(0x01);
+ 117   1      }
+ 118          //***********************************
+ 119          //¶ÔÒº¾§Ð´Êý¾Ý
+ 120          //contentÎªÒªÐ´ÈëµÄÊý¾Ý
+ 121          //***********************************
+ 122          void wr_d_lcd(uchar content)
+ 123          {
+ 124   1              busy_lcd();
+ 125   1              rs=1;
+ 126   1          rw=0;
+ 127   1              lcddata=content;
+ 128   1              e=1;
+ 129   1              ;
+ 130   1              e=0;
+ 131   1      }
+ 132          //********************************
+ 133          //¶ÔÒº¾§Ð´Ö¸Áî
+ 134          //contentÎªÒªÐ´ÈëµÄÖ¸Áî´úÂë
+ 135          //*****************************
+ 136          void wr_i_lcd(uchar content)
+ 137          {
+ 138   1              busy_lcd();
+ 139   1              rs=0;
+ 140   1          rw=0;
+ 141   1              lcddata=content;
+ 142   1              e=1;
+ 143   1              ;
+ 144   1              e=0;
+ 145   1      }
+ 146          //********************************
+ 147          //Òº¾§¼ì²âÃ¦×´Ì¬
+ 148          //ÔÚÐ´ÈëÖ®Ç°±ØÐëÖ´ÐÐ
+ 149          //********************************
+ 150          void busy_lcd(void)
+ 151          {
+ 152   1        lcddata=0xff;
+ 153   1        rs=0;
+ 154   1        rw=1;
+ 155   1        e =1;
+ 156   1        while(busy==1);
+ 157   1        e =0;
+ 158   1      }
+ 159          //********************************
+ 160          //Ö¸¶¨ÒªÏÔÊ¾×Ö·ûµÄ×ø±ê
+ 161          //*******************************
+ 162          void gotoxy(unsigned char y, unsigned char x)
+ 163          {
+ 164   1              if(y==1)
+ 165   1                      wr_i_lcd(0x80|x);
+ 166   1              if(y==2)
+ 167   1              wr_i_lcd(0x90|x);
+ 168   1              if(y==3)
+ 169   1                      wr_i_lcd((0x80|x)+8);
+ 170   1              if(y==4)
+ 171   1              wr_i_lcd((0x90|x)+8);
+ 172   1      }
+ 173          //**********************************
+ 174          //Òº¾§ÏÔÊ¾×Ö·û´®³ÌÐò
+ 175          //**********************************
+ 176          void print(uchar *str)
+ 177          {
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 4   
+
+ 178   1              while(*str!='\0')
+ 179   1              {
+ 180   2                      wr_d_lcd(*str);
+ 181   2                      str++;
+ 182   2              }
+ 183   1      }
+ 184          
+ 185          
+ 186          
+ 187          
+ 188          void UartInit(void)             //9600bps@11.0592MHz
+ 189          {
+ 190   1               TMOD = 0x20;
+ 191   1               SCON = 0x50;
+ 192   1               TH1 = 0xFd;
+ 193   1               TL1 = TH1;
+ 194   1               TR1 = 1;
+ 195   1               EA =1;
+ 196   1               ES =1;
+ 197   1      
+ 198   1              S2CON = 0x50;//´®¿Ú2¹¤×÷ÔÚ·½Ê½1??10Î»Òì²½ÊÕ·¢ S2REN=1ÔÊÐí½ÓÊÕ
+ 199   1              BRT = 0xFd;//¶ÀÁ¢²¨ÌØÂÊ·¢ÉúÆ÷³õÖµ
+ 200   1              AUXR = 0x10;//BRTR=1 ¶ÀÁ¢²¨ÌØÂÊ·¢ÉúÆ÷¿ªÊ¼¼ÆÊý
+ 201   1              IE2 =0x01;//¿ª´®¿Ú2ÖÐ¶Ï   ES2=1
+ 202   1      }
+ 203          
+ 204          
+ 205          void sentbit(unsigned char dat) 
+ 206          {
+ 207   1              SBUF = dat;
+ 208   1              while(!TI);
+ 209   1              TI = 0; 
+ 210   1      
+ 211   1      }
+ 212          
+ 213          
+ 214          void send_str(unsigned char* p)//·¢ËÍ×Ö·û´®
+ 215          {
+ 216   1              unsigned char i=0;
+ 217   1              while(*p > 0)
+ 218   1              {
+ 219   2                      sentbit(*p++);
+ 220   2              }
+ 221   1      }
+ 222          
+ 223          
+ 224          /****************´®ÐÐ¿Ú2·¢ËÍ****************/
+ 225                  
+ 226          void UART_2SendOneByte(unsigned char c)
+ 227          {
+ 228   1              S2BUF = c;
+ 229   1              while(!(S2CON&S2TI));//ÈôS2TI=0£¬ÔÚ´ËµÈ´ý
+ 230   1              S2CON&=~S2TI;//S2TI=0
+ 231   1      }
+ 232                  
+ 233          void delay(unsigned int z)
+ 234          {
+ 235   1              unsigned int x,y;
+ 236   1              for(x=z;x>0;x--)
+ 237   1              for(y=600;y>0;y--);
+ 238   1      }
+ 239          
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 5   
+
+ 240          
+ 241          
+ 242          void convert(uchar *ps, uchar *num_ID, int n)    //ÏÔÊ¾¿¨ºÅ
+ 243          {
+ 244   1              unsigned char j=0;
+ 245   1              for(j = 0; j < n; j++)                    
+ 246   1              {
+ 247   2                      ps[2*j] = (num_ID[j] & 0xf0) >> 4; 
+ 248   2      
+ 249   2                      if(ps[2*j] >= 10) {
+ 250   3                       ps[2*j] = ps[2*j] + 48 + 7;
+ 251   3                      }
+ 252   2                      else {
+ 253   3                         ps[2*j] = ps[2*j] + 48;
+ 254   3                      }
+ 255   2      
+ 256   2                      ps[2*j+1] = num_ID[j] & 0x0f;
+ 257   2      
+ 258   2                      if(ps[2*j+1] >= 10) {
+ 259   3                        ps[2*j+1] = ps[2*j+1] + 48 + 7;
+ 260   3                      }
+ 261   2                      else {
+ 262   3                         ps[2*j+1] = ps[2*j+1] + 48;
+ 263   3                      }
+ 264   2                      
+ 265   2              }        
+ 266   1      }
+ 267          
+ 268          
+ 269          
+ 270          
+ 271          
+ 272          /************´®ÐÐ¿Ú1ÖÐ¶Ï´¦Àíº¯Êý*************/
+ 273          void UART_1Interrupt(void) interrupt 4
+ 274          {
+ 275   1               if(RI==1)
+ 276   1               {
+ 277   2                      RI=0;
+ 278   2                      artemp1=SBUF;
+ 279   2                      if(idbuffnum < 13) {
+ 280   3      
+ 281   3                              sentbit(artemp1);
+ 282   3                              idtemp[idbuffnum] = artemp1;
+ 283   3                              idbuffnum++;
+ 284   3                      }
+ 285   2                      else {
+ 286   3                                      arflag1=1;
+ 287   3                      
+ 288   3                      }
+ 289   2               }
+ 290   1      }
+ 291          
+ 292          /************´®ÐÐ¿Ú2ÖÐ¶Ï´¦Àíº¯Êý*************/
+ 293          
+ 294          
+ 295           
+ 296          void UART_2Interrupt(void) interrupt 8
+ 297          {
+ 298   1              if(S2CON&S2RI)
+ 299   1              {
+ 300   2                      S2CON&=~S2RI;
+ 301   2                      arflag2=1;
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 6   
+
+ 302   2                      artemp2=S2BUF;
+ 303   2                  sentbit(artemp2);
+ 304   2              } 
+ 305   1      }
+ 306          
+ 307          
+ 308          
+ 309                   
+ 310          /*------------------------------------------------
+ 311                           Ö÷³ÌÐò
+ 312          ------------------------------------------------*/
+ 313          void main()
+ 314          {
+ 315   1              unsigned char i=0;
+ 316   1              unsigned char status,temp;
+ 317   1              UartInit();
+ 318   1      
+ 319   1              init_lcd();
+ 320   1      
+ 321   1                 //RC522
+ 322   1           PcdReset();
+ 323   1           PcdAntennaOff(); 
+ 324   1           PcdAntennaOn();
+ 325   1      
+ 326   1              gotoxy(1,0);
+ 327   1              print("IC¿¨ºÅ£º");
+ 328   1      
+ 329   1              sentbit('o');
+ 330   1              sentbit('k');
+ 331   1      
+ 332   1              LED_GREEN = 1;
+ 333   1              while(1)
+ 334   1              {
+ 335   2                  //´®¿Ú½ÓÊÕÊý¾Ý
+ 336   2                 if(arflag1 == 1) 
+ 337   2                 {
+ 338   3                       LED_GREEN = 0;
+ 339   3      
+ 340   3                              convert(idstr,idtemp,13);
+ 341   3                              init_lcd();
+ 342   3              /*      for(i=0;i<26;i++) {
+ 343   3                                      sentbit(idtemp[i/2]);
+ 344   3                                sentbit(idstr[i]);
+ 345   3                      } */
+ 346   3                              gotoxy(1,0);
+ 347   3                              print("ID¿¨ºÅ£º");
+ 348   3                              gotoxy(2,0);
+ 349   3                                      print(idstr); 
+ 350   3                              idbuffnum = 0;
+ 351   3                              arflag1 = 0;    
+ 352   3                 }
+ 353   2      
+ 354   2                 /*
+ 355   2                 if(arflag2 == 1)
+ 356   2                 {
+ 357   2                              sentbit(artemp2);
+ 358   2                              arflag2 = 0;
+ 359   2                              S2CON&=~S2RI;
+ 360   2                 }  */
+ 361   2                 status = PcdRequest(PICC_REQALL, g_ucTempbuf);//Ñ°¿¨
+ 362   2      
+ 363   2      
+C51 COMPILER V9.00   12864                                                                 10/31/2017 00:11:29 PAGE 7   
+
+ 364   2                /* if (status != MI_OK)
+ 365   2              {    
+ 366   2                              continue;
+ 367   2              } 
+ 368   2                               */
+ 369   2                       status = PcdAnticoll(g_ucTempbuf);//·À³å×²
+ 370   2                       if (status != MI_OK){continue;}
+ 371   2                      if(rcc == 1) {
+ 372   3                              rcc = 1;
+ 373   3                      }
+ 374   2                      else {
+ 375   3                          for(i=0;i<4;i++)
+ 376   3                              {
+ 377   4                                      temp=g_ucTempbuf[i];
+ 378   4                                      cuctemp[i] = temp;
+ 379   4                                      sentbit(cuctemp[i]);
+ 380   4                                      rcc = 1;
+ 381   4                              }
+ 382   3      
+ 383   3                              LED_GREEN = 0;
+ 384   3      
+ 385   3                              convert(icstr,cuctemp,4);
+ 386   3                              init_lcd();
+ 387   3                              gotoxy(1,0);
+ 388   3                              print("IC¿¨ºÅ£º");
+ 389   3                              gotoxy(2,0);
+ 390   3                              print(icstr); 
+ 391   3                              while(MI_OK == status){
+ 392   4                                      status = PcdAnticoll(g_ucTempbuf);//·À³å×²
+ 393   4                              }
+ 394   3                      }
+ 395   2              }
+ 396   1      
+ 397   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    954    ----
+   CONSTANT SIZE    =     44    ----
+   XDATA SIZE       =     36    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     40      22
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
